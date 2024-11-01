@@ -1,6 +1,6 @@
-import os
 import mysql.connector
 from mysql.connector import Error
+import os
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,9 +16,7 @@ class DatabaseOperations:
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
-            return
-            
+        load_dotenv()
         try:
             self.connection = mysql.connector.connect(
                 host=os.getenv('DB_HOST'),
@@ -27,11 +25,6 @@ class DatabaseOperations:
                 database=os.getenv('DB_NAME'),
                 port=int(os.getenv('DB_PORT', 3306))
             )
-            
-            if self.connection.is_connected():
-                print("Successfully connected to the database")
-                self._initialized = True
-                
         except Error as e:
             print(f"Error connecting to database: {e}")
             raise
@@ -66,7 +59,6 @@ class DatabaseOperations:
             VALUES (%s, %s, %s)
             """
             
-            # Usar las columnas exactas del Excel
             teams_data = df[['team_name', 'city', 'stadium_name']].values.tolist()
             
             cursor.executemany(insert_query, teams_data)
@@ -82,15 +74,12 @@ class DatabaseOperations:
     def get_all_teams(self):
         """Get all teams"""
         try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM teams")
-            teams = cursor.fetchall()
-            return teams
+            with self.connection.cursor(dictionary=True) as cursor:
+                cursor.execute("SELECT * FROM teams")
+                return cursor.fetchall()
         except Error as e:
             print(f"Error: {e}")
             return []
-        finally:
-            cursor.close()
 
     def get_all_players(self):
         """Get all players with team and position information"""
@@ -104,23 +93,6 @@ class DatabaseOperations:
             """)
             players = cursor.fetchall()
             return players
-        except Error as e:
-            print(f"Error: {e}")
-            return []
-        finally:
-            cursor.close()
-
-    def get_all_coaches(self):
-        """Get all coaches with team information"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("""
-                SELECT c.*, t.team_name 
-                FROM coaches c
-                LEFT JOIN teams t ON c.team_id = t.team_id
-            """)
-            coaches = cursor.fetchall()
-            return coaches
         except Error as e:
             print(f"Error: {e}")
             return []
@@ -158,6 +130,23 @@ class DatabaseOperations:
         finally:
             cursor.close()
 
+    def insert_player(self, player_name, age, position_id, team_id):
+        """Insert a single player"""
+        try:
+            cursor = self.connection.cursor()
+            insert_query = """
+            INSERT INTO players (player_name, age, position_id, team_id)
+            VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (player_name, age, position_id, team_id))
+            self.connection.commit()
+            return True, "Player successfully added"
+        except Error as e:
+            self.connection.rollback()
+            return False, f"Database error: {e}"
+        finally:
+            cursor.close()
+
     def insert_coaches(self, df):
         """Insert coaches in bulk"""
         try:
@@ -176,20 +165,67 @@ class DatabaseOperations:
         finally:
             cursor.close()
 
-    def insert_player(self, player_name, age, position_id, team_id):
-        """Insert a single player"""
+    def get_all_coaches(self):
+        """Get all coaches with team information"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT c.*, t.team_name 
+                FROM coaches c
+                LEFT JOIN teams t ON c.team_id = t.team_id
+            """)
+            return cursor.fetchall()
+        except Error as e:
+            print(f"Error: {e}")
+            return []
+        finally:
+            cursor.close()
+
+    def insert_coach(self, coach_name, age, team_id):
+        """Insert a single coach"""
         try:
             cursor = self.connection.cursor()
-            
-            # Insertar el jugador
             insert_query = """
-            INSERT INTO players (player_name, age, position_id, team_id)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO coaches (coach_name, age, team_id)
+            VALUES (%s, %s, %s)
             """
-            cursor.execute(insert_query, (player_name, age, position_id, team_id))
+            cursor.execute(insert_query, (coach_name, age, team_id))
             self.connection.commit()
-            return True, "Player successfully added"
-            
+            return True, "Coach successfully added"
+        except Error as e:
+            self.connection.rollback()
+            return False, f"Database error: {e}"
+        finally:
+            cursor.close()
+
+    def insert_team(self, team_name, city, stadium_name):
+        """Insert a single team"""
+        try:
+            cursor = self.connection.cursor()
+            insert_query = """
+            INSERT INTO teams (team_name, city, stadium_name)
+            VALUES (%s, %s, %s)
+            """
+            cursor.execute(insert_query, (team_name, city, stadium_name))
+            self.connection.commit()
+            return True, "Team successfully added"
+        except Error as e:
+            self.connection.rollback()
+            return False, f"Database error: {e}"
+        finally:
+            cursor.close()
+
+    def insert_coach(self, coach_name, age, team_id):
+        """Insert a single coach"""
+        try:
+            cursor = self.connection.cursor()
+            insert_query = """
+            INSERT INTO coaches (coach_name, age, team_id)
+            VALUES (%s, %s, %s)
+            """
+            cursor.execute(insert_query, (coach_name, age, team_id))
+            self.connection.commit()
+            return True, "Coach successfully added"
         except Error as e:
             self.connection.rollback()
             return False, f"Database error: {e}"
