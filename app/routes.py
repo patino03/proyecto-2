@@ -1,120 +1,50 @@
 from fastapi import APIRouter, HTTPException
-from app.models import (ContractCreate, Contract, 
-                       MatchCreate, Match,
-                       SeasonStatCreate, SeasonStat)
-from app.apidatabase import get_db_connection
 from typing import List
-from datetime import datetime
+from .models import (Team, TeamCreate, Player, PlayerCreate, Coach, CoachCreate, 
+                    Match, MatchCreate, Contract, ContractCreate, SeasonStat, SeasonStatCreate)
+from .database import DatabaseOperations
 
 router = APIRouter()
+db = DatabaseOperations()
 
-# Endpoints para Contracts
-@router.post("/contracts/", response_model=Contract, tags=["Contracts"])
-def create_contract(contract: ContractCreate):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        query = """
-        INSERT INTO contracts (player_id, start_date, end_date, player_value)
-        VALUES (%s, %s, %s, %s)
-        """
-        values = (contract.player_id, contract.start_date, 
-                 contract.end_date, contract.player_value)
-        
-        cursor.execute(query, values)
-        conn.commit()
-        
-        contract_id = cursor.lastrowid
-        return Contract(contract_id=contract_id, **contract.dict())
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
+@router.get("/teams", response_model=List[Team])
+async def get_teams():
+    teams = db.get_all_teams()
+    if not teams:
+        raise HTTPException(status_code=404, detail="No teams found")
+    return teams
 
-@router.get("/contracts/", response_model=List[Contract], tags=["Contracts"])
-def list_contracts():
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM contracts")
-        contracts = cursor.fetchall()
-        return [Contract(**contract) for contract in contracts]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
+@router.post("/teams", response_model=Team)
+async def create_team(team: TeamCreate):
+    result = db.insert_team(team.team_name, team.city, team.stadium_name)
+    if not result[0]:
+        raise HTTPException(status_code=400, detail=result[1])
+    return {"team_id": result[2], **team.dict()}
 
-# Endpoints para Matches
-@router.post("/matches/", response_model=Match, tags=["Matches"])
-def create_match(match: MatchCreate):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        query = """
-        INSERT INTO matches (home_team_id, away_team_id, match_date, 
-                           score_home_team, score_away_team)
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        values = (match.home_team_id, match.away_team_id, match.match_date,
-                 match.score_home_team, match.score_away_team)
-        
-        cursor.execute(query, values)
-        conn.commit()
-        
-        match_id = cursor.lastrowid
-        return Match(match_id=match_id, **match.dict())
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
+@router.get("/players", response_model=List[Player])
+async def get_players():
+    players = db.get_all_players()
+    if not players:
+        raise HTTPException(status_code=404, detail="No players found")
+    return players
 
-# Endpoints para Season Stats
-@router.post("/season-stats/", response_model=SeasonStat, tags=["Season Stats"])
-def create_season_stat(stat: SeasonStatCreate):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        query = """
-        INSERT INTO season_stats (player_id, goals, assists, 
-                                yellow_cards, red_cards, minutes_played)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        values = (stat.player_id, stat.goals, stat.assists,
-                 stat.yellow_cards, stat.red_cards, stat.minutes_played)
-        
-        cursor.execute(query, values)
-        conn.commit()
-        
-        stat_id = cursor.lastrowid
-        return SeasonStat(stat_id=stat_id, **stat.dict())
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
+@router.post("/players", response_model=Player)
+async def create_player(player: PlayerCreate):
+    result = db.insert_player(player.player_name, player.age, player.position_id, player.team_id)
+    if not result[0]:
+        raise HTTPException(status_code=400, detail=result[1])
+    return {"player_id": result[2], **player.dict()}
 
-# Queries específicas
-@router.get("/stats/player/{player_id}", tags=["Queries"])
-def get_player_stats(player_id: int):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor(dictionary=True)
-        query = """
-        SELECT s.*, c.player_value, c.start_date, c.end_date
-        FROM season_stats s
-        LEFT JOIN contracts c ON s.player_id = c.player_id
-        WHERE s.player_id = %s
-        """
-        cursor.execute(query, (player_id,))
-        return cursor.fetchone()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close() 
+@router.get("/coaches", response_model=List[Coach])
+async def get_coaches():
+    coaches = db.get_all_coaches()
+    if not coaches:
+        raise HTTPException(status_code=404, detail="No coaches found")
+    return coaches
+
+@router.post("/coaches", response_model=Coach)
+async def create_coach(coach: CoachCreate):
+    result = db.insert_coach(coach.coach_name, coach.age, coach.team_id)
+    if not result[0]:
+        raise HTTPException(status_code=400, detail=result[1])
+    return {"coach_id": result[2], **coach.dict()}
